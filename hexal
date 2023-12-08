@@ -1,0 +1,155 @@
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <vector>
+#include <queue>
+
+const int rows = 10;
+const int cols = 10;
+
+struct HexNode {
+    int x, y;
+    int cost;
+    bool visited;
+    bool selected;
+    sf::Vector2f position;
+    HexNode* parent;
+};
+
+int distance(const HexNode& a, const HexNode& b) {
+    return std::abs(a.x - b.x) + std::abs(a.y - b.y) + std::abs(a.x + a.y - b.x - b.y);
+}
+
+std::vector<std::vector<HexNode>> initializeGrid() {
+    std::vector<std::vector<HexNode>> grid;
+
+    for (int i = 0; i < rows; ++i) {
+        std::vector<HexNode> row;
+        for (int j = 0; j < cols; ++j) {
+            int xOffset = i % 2 == 0 ? 0 : 1;
+            int x = j + xOffset;
+            int y = i;
+
+            HexNode node;
+            node.x = x;
+            node.y = y;
+            node.cost = INT_MAX;
+            node.visited = false;
+            node.selected = false;
+            node.position = sf::Vector2f(x * 50.0f, y * 50.0f);
+            node.parent = nullptr;
+
+            row.push_back(node);
+        }
+        grid.push_back(row);
+    }
+
+    return grid;
+}
+
+void dijkstra(std::vector<std::vector<HexNode>>& grid, const HexNode& start, const HexNode& goal) {
+    std::priority_queue<std::pair<int, HexNode*>> pq;
+    grid[start.y][start.x].cost = 0;
+    pq.push({ 0, &grid[start.y][start.x] });
+
+    while (!pq.empty()) {
+        HexNode* current = pq.top().second;
+        pq.pop();
+
+        if (current->visited) continue;
+        current->visited = true;
+
+        for (int i = -1; i <= 1; ++i) {
+            for (int j = -1; j <= 1; ++j) {
+                if (i == 0 && j == 0) continue;
+
+                int newX = current->x + j;
+                int newY = current->y + i;
+
+                if (newX >= 0 && newX < cols && newY >= 0 && newY < rows) {
+                    HexNode& neighbor = grid[newY][newX];
+                    int newCost = current->cost + distance(*current, neighbor);
+
+                    if (!neighbor.visited && newCost < neighbor.cost) {
+                        neighbor.cost = newCost;
+                        neighbor.parent = current;
+                        pq.push({ -newCost, &neighbor });
+                    }
+                }
+            }
+        }
+    }
+}
+
+int main() {
+    sf::RenderWindow window(sf::VideoMode(800, 600), "Dijkstra's Algorithm - Hexagonal Grid");
+
+    std::vector<std::vector<HexNode>> grid = initializeGrid();
+
+    HexNode start = grid[0][0];
+    start.cost = 0;
+
+    HexNode selectedHex = grid[rows / 2][cols / 2]; // Inicialmente seleccionado para propósitos de demostración
+
+    dijkstra(grid, start, selectedHex);
+
+    while (window.isOpen()) {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed) {
+                window.close();
+            }
+            else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+                sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
+
+                for (int i = 0; i < rows; ++i) {
+                    for (int j = 0; j < cols; ++j) {
+                        sf::CircleShape hexagon(20, 6);
+                        hexagon.setPosition(grid[i][j].position);
+                        sf::FloatRect hexBounds = hexagon.getGlobalBounds();
+
+                        if (hexBounds.contains(static_cast<float>(mousePosition.x), static_cast<float>(mousePosition.y))) {
+                            selectedHex = grid[i][j];
+                            dijkstra(grid, start, selectedHex); // Recalcular el camino más corto
+                        }
+                    }
+                }
+            }
+        }
+
+        window.clear();
+
+        // Dibujar hexágonos y recorrido
+        for (int i = 0; i < rows; ++i) {
+            for (int j = 0; j < cols; ++j) {
+                sf::CircleShape hexagon(20, 6);
+                hexagon.setPosition(grid[i][j].position);
+
+                if (grid[i][j].selected) {
+                    hexagon.setFillColor(sf::Color::Yellow);
+                }
+                else if (grid[i][j].visited) {
+                    hexagon.setFillColor(sf::Color::Green);
+                }
+                else {
+                    hexagon.setFillColor(sf::Color::White);
+                }
+
+                window.draw(hexagon);
+            }
+        }
+
+        HexNode* current = &selectedHex;
+        while (current != nullptr) {
+            sf::CircleShape pathHexagon(20, 6);
+            pathHexagon.setPosition(current->position);
+            pathHexagon.setFillColor(sf::Color::Blue);
+            window.draw(pathHexagon);
+
+            current = current->parent;
+        }
+
+        window.display();
+    }
+
+    return 0;
+}
